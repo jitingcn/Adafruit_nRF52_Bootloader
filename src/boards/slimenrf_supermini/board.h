@@ -47,6 +47,7 @@
 //--------------------------------------------------------------------+
 // BLE OTA
 //--------------------------------------------------------------------+
+#define BLEDIS_MANUFACTURER  "SlimeVR"
 #define BLEDIS_MODEL         "SlimeNRF Tracker ProMicro"
 
 //--------------------------------------------------------------------+
@@ -56,8 +57,7 @@
 #define USB_DESC_UF2_PID       0x7693
 #define USB_DESC_CDC_ONLY_PID  0x7693
 
-// not by SlimeVR!
-#define UF2_PRODUCT_NAME  "SlimeNRF Tracker ProMicro"
+#define UF2_PRODUCT_NAME  "SlimeVR SlimeNRF Tracker ProMicro"
 #define UF2_VOLUME_LABEL  "SLIMENRFTRK"
 #define UF2_BOARD_ID      "nRF52840-SlimeNRFTracker-ProMicro"
 #define UF2_INDEX_URL     "https://github.com/SlimeVR"
