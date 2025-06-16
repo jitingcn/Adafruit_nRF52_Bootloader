@@ -10,7 +10,7 @@ const uint32_t bootloaderConfig[] =
 
   204, 0x100000,                                // FLASH_BYTES = 0x100000
   205, 0x40000,                                 // RAM_BYTES = 0x40000
-  208, (USB_DESC_VID << 16) | USB_DESC_UF2_PID, // BOOTLOADER_BOARD_ID = USB VID+PID, used for verification when updating bootloader via uf2
+  208, (0x2886 << 16) | 0x0044,                 // keep same as xiao for update compatibility
   209, 0xada52840,                              // UF2_FAMILY = 0xada52840
   210, 0x20,                                    // PINS_PORT_SIZE = PA_32
 
