@@ -27,9 +27,7 @@
 
 #define _PINNUM(port, pin)    ((port)*32 + (pin))
 
-// regulator on promicro boards are less efficient than expected
-// #define UICR_REGOUT0_VALUE UICR_REGOUT0_VOUT_2V1
-#define UICR_REGOUT0_VALUE UICR_REGOUT0_VOUT_3V3
+#define UICR_REGOUT0_VALUE UICR_REGOUT0_VOUT_2V1
 
 /*------------------------------------------------------------------*/
 /* LED
