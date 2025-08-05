@@ -46,8 +46,8 @@
 /* BUTTON
  *------------------------------------------------------------------*/
 #define BUTTONS_NUMBER        2
-#define BUTTON_1              _PINNUM(0, 18) // RESET
-#define BUTTON_2              _PINNUM(0, 3)  // Random unused pin
+#define BUTTON_1              _PINNUM(0, 0)   // Random unused pin
+#define BUTTON_2              _PINNUM(0, 10)  // Random unused pin
 #define BUTTON_PULL           NRF_GPIO_PIN_PULLUP
 
 //--------------------------------------------------------------------+
