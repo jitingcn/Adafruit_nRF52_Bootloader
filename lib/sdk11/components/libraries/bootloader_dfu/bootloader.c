@@ -75,6 +75,18 @@ static void pstorage_callback_handler(pstorage_handle_t * p_handle,
     APP_ERROR_CHECK(result);
 }
 
+/* Handle button press for DFU exit */
+static void handle_button_exit(void * p_event_data, uint16_t event_size)
+{
+  (void)p_event_data;
+  (void)event_size;
+
+  // Trigger DFU exit through standard update process
+  dfu_update_status_t update_status;
+  update_status.status_code = DFU_RESET;
+  bootloader_dfu_update_process(update_status);
+}
+
 /* Terminate the forced DFU mode on startup if no packets is received
  * by put an terminal handler to scheduler
  */
@@ -109,6 +121,9 @@ static void dfu_startup_timer_handler(void * p_context)
  */
 static void wait_for_events(void)
 {
+  static uint32_t button_check_counter = 0;
+  static bool last_button_state = false;
+
   for ( ;; )
   {
     // Wait in low power state for any events.
@@ -120,6 +135,25 @@ static void wait_for_events(void)
     if ( nrf_wdt_started(NRF_WDT) )
     {
       for (uint8_t i=0; i<8; i++) nrf_wdt_reload_request_set(NRF_WDT, i);
+    }
+
+    // Check button 2 every 1000 iterations to reduce frequency and add debouncing
+    button_check_counter++;
+    if (button_check_counter >= 1000)
+    {
+      button_check_counter = 0;
+
+      // Check button 2 (BUTTON_FRESET) to exit DFU mode
+      bool current_button_state = button_pressed(BUTTON_FRESET);
+
+      // Exit DFU when button is pressed (simple approach)
+      if (current_button_state && !last_button_state)
+      {
+        // Schedule button exit handler through app scheduler
+        app_sched_event_put(NULL, 0, handle_button_exit);
+      }
+
+      last_button_state = current_button_state;
     }
 
     // Event received. Process it from the scheduler.
