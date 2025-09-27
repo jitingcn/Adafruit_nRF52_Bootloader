@@ -22,18 +22,17 @@
  * THE SOFTWARE.
  */
 
-#ifndef _SLIMENRF_RCV_STYRIA_R1_H
-#define _SLIMENRF_RCV_STYRIA_R1_H
+#ifndef _SLIMENRF_RECEIVER_STYRIA_R1_H
+#define _SLIMENRF_RECEIVER_STYRIA_R1_H
 
 #define _PINNUM(port, pin)    ((port)*32 + (pin))
-
-#define UICR_REGOUT0_VALUE UICR_REGOUT0_VOUT_3V3
 
 /*------------------------------------------------------------------*/
 /* LED
  *------------------------------------------------------------------*/
-#define LEDS_NUMBER       1
-#define LED_PRIMARY_PIN   _PINNUM(0, 8) // Red
+#define LEDS_NUMBER       2
+#define LED_PRIMARY_PIN   _PINNUM(0, 6) // Blue
+#define LED_SECONDARY_PIN _PINNUM(0, 8) // Red
 #define LED_STATE_ON      1
 
 /*------------------------------------------------------------------*/
@@ -59,7 +58,7 @@
 
 #define UF2_PRODUCT_NAME  "SlimeVR SlimeNRF Receiver Styria R1"
 #define UF2_VOLUME_LABEL  "SLIMENRF"
-#define UF2_BOARD_ID      "nRF52840-SlimeNRFReceiver-Styria-R1"
+#define UF2_BOARD_ID      "slimevr-styria-receiver-r1"
 #define UF2_INDEX_URL     "https://github.com/SlimeVR"
 
-#endif // _SLIMENRF_RCV_STYRIA_R1_H
+#endif // _SLIMENRF_RECEIVER_STYRIA_R1_H

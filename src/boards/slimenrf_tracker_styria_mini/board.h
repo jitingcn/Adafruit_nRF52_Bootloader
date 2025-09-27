@@ -22,12 +22,10 @@
  * THE SOFTWARE.
  */
 
-#ifndef _SLIMENRF_TRK_STYRIA_R1_H
-#define _SLIMENRF_TRK_STYRIA_R1_H
+#ifndef _SLIMENRF_TRACKER_STYRIA_MINI_H
+#define _SLIMENRF_TRACKER_STYRIA_MINI_H
 
 #define _PINNUM(port, pin)    ((port)*32 + (pin))
-
-#define UICR_REGOUT0_VALUE UICR_REGOUT0_VOUT_3V3
 
 /*------------------------------------------------------------------*/
 /* LED
@@ -48,19 +46,18 @@
 // BLE OTA
 //--------------------------------------------------------------------+
 #define BLEDIS_MANUFACTURER  "Styria"
-#define BLEDIS_MODEL         "SlimeNRF Tracker Styria R1"
+#define BLEDIS_MODEL         "SlimeNRF Tracker Styria Mini"
 
 //--------------------------------------------------------------------+
 // USB
 //--------------------------------------------------------------------+
-// keep using original USB_DESC from nice!nano/clones
 #define USB_DESC_VID           0x1209
 #define USB_DESC_UF2_PID       0x7693
 #define USB_DESC_CDC_ONLY_PID  0x7693
 
-#define UF2_PRODUCT_NAME  "SlimeVR SlimeNRF Tracker Styria R1"
+#define UF2_PRODUCT_NAME  "SlimeVR SlimeNRF Tracker Styria Mini"
 #define UF2_VOLUME_LABEL  "SLIMENRF"
-#define UF2_BOARD_ID      "nRF52840-SlimeNRFTracker-Styria-R1"
+#define UF2_BOARD_ID      "slimevr-styria-mini"
 #define UF2_INDEX_URL     "https://github.com/SlimeVR"
 
-#endif // _SLIMENRF_TRK_STYRIA_R1_H
+#endif // _SLIMENRF_TRACKER_STYRIA_MINI_H
