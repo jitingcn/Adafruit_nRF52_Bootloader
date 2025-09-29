@@ -25,7 +25,7 @@
         python312Packages.intelhex
         nrf-command-line-tools
         gcc-arm-embedded
-        adafruit-nrfutil
+        nordic-nrfutil
         pyocd
       ];
     };

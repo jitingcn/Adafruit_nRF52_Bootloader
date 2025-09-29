@@ -4,10 +4,13 @@
 
 A CDC/DFU/UF2 bootloader for Nordic nRF52 microcontroller. UF2 is an easy-to-use bootloader that appears as a flash drive. You can just copy `.uf2`-format application images to the flash drive to load new firmware. See https://github.com/Microsoft/uf2 for more information.
 
-DFU via serial/CDC requires [adafruit-nrfutil](https://github.com/adafruit/Adafruit_nRF52_nrfutil), a modified version of [Nordic nrfutil](https://github.com/NordicSemiconductor/pc-nrfutil). Install `python3` if it is not installed already and run this command to install adafruit-nrfutil from PyPi:
+DFU via serial/CDC requires the standalone [Nordic nrfutil](https://www.nordicsemi.com/Products/Development-tools/nRF-Util). You can download it from the official Nordic website or install it via:
 
-```
-$ pip3 install --user adafruit-nrfutil
+```bash
+# Download the latest nrfutil for Linux
+curl -LO https://developer.nordicsemi.com/.pc-tools/nrfutil/x64-linux/nrfutil
+chmod +x nrfutil
+sudo mv nrfutil /usr/local/bin/
 ```
 
 ## Supported Boards
