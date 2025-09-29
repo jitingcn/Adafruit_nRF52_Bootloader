@@ -75,7 +75,7 @@ RM = rm -rf
 CP = cp
 
 # Flasher utility options
-NRFUTIL = adafruit-nrfutil
+NRFUTIL = nrfutil
 NRFJPROG = nrfjprog
 FLASHER ?= nrfjprog
 PYOCD ?= pyocd
@@ -108,17 +108,23 @@ ifeq ($(MCU_SUB_VARIANT),nrf52)
   DFU_DEV_REV = 0xADAF
   CFLAGS += -DNRF52 -DNRF52832_XXAA -DS132
   DFU_APP_DATA_RESERVED=7*4096
+  # SD requirement for s132_nrf52_7.3.0
+  SD_REQ = 0x124
 else ifeq ($(MCU_SUB_VARIANT),nrf52833)
   SD_NAME = s140
   DFU_DEV_REV = 52833
   CFLAGS += -DNRF52833_XXAA -DS140
   DFU_APP_DATA_RESERVED=7*4096
+  # SD requirement for s140_nrf52_7.3.0
+  SD_REQ = 0x123
 else ifeq ($(MCU_SUB_VARIANT),nrf52840)
   SD_NAME = s140
   DFU_DEV_REV = 52840
   CFLAGS += -DNRF52840_XXAA -DS140
   # App reserved 40KB (8+32) to match circuitpython for 840
   DFU_APP_DATA_RESERVED=10*4096
+  # SD requirement for s140_nrf52_7.3.0
+  SD_REQ = 0x123
 else
   $(error Sub Variant $(MCU_SUB_VARIANT) is unknown)
 endif
@@ -317,6 +323,9 @@ CFLAGS += -DBLEDIS_FW_VERSION='"$(GIT_VERSION) $(SD_NAME) $(SD_VERSION)"'
 _VER = $(subst ., ,$(word 1, $(subst -, ,$(GIT_VERSION))))
 CFLAGS += -DMK_BOOTLOADER_VERSION='($(word 1,$(_VER)) << 16) + ($(word 2,$(_VER)) << 8) + $(word 3,$(_VER))'
 
+# Calculate bootloader version for nrfutil (same as MK_BOOTLOADER_VERSION but as make variable)
+BOOTLOADER_VERSION = $(shell echo $$(( ($(word 1,$(_VER)) << 16) + ($(word 2,$(_VER)) << 8) + $(word 3,$(_VER)) )))
+
 # Debug option use RTT for printf
 ifeq ($(DEBUG), 1)
   CFLAGS += -DCFG_DEBUG -DSEGGER_RTT_MODE_DEFAULT=SEGGER_RTT_MODE_BLOCK_IF_FIFO_FULL
@@ -446,7 +455,7 @@ $(BUILD)/$(MERGED_FILE).hex: $(BUILD)/$(OUT_NAME).hex
 
 # Create pkg zip file for bootloader+SD combo to use with DFU CDC
 $(BUILD)/$(MERGED_FILE).zip: $(BUILD)/$(OUT_NAME).hex
-	@$(NRFUTIL) dfu genpkg --dev-type 0x0052 --dev-revision $(DFU_DEV_REV) --bootloader $< --softdevice $(SD_HEX) $@
+	@$(NRFUTIL) pkg generate --bootloader $< --bootloader-version $(BOOTLOADER_VERSION) --softdevice $(SD_HEX) --hw-version $(DFU_DEV_REV) --sd-req $(SD_REQ) $@
 
 #-------------- Artifacts --------------
 $(BIN):
@@ -495,11 +504,11 @@ flash-uf2: $(BUILD)/update-$(OUT_NAME)_nosd.uf2
 	@echo Flashing: $(notdir $<)
 	python lib/uf2/utils/uf2conv.py -f $(UF2_FAMILY_ID_BOOTLOADER) --deploy $<
 
-# dfu with adafruit-nrfutil using CDC interface
+# dfu with nrfutil using USB serial interface
 dfu-flash: flash-dfu
 flash-dfu: $(BUILD)/$(MERGED_FILE).zip
 	@:$(call check_defined, SERIAL, example: SERIAL=/dev/ttyACM0)
-	$(NRFUTIL) --verbose dfu serial --package $< -p $(SERIAL) -b 115200 --singlebank --touch 1200
+	$(NRFUTIL) dfu serial --package $< --port $(SERIAL) -b 115200
 
 # flash skip crc magic ( app valid = 0x0001, crc = 0x0000 )
 #flash-skip-crc:

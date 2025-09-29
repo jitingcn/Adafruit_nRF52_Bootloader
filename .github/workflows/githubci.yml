@@ -46,7 +46,17 @@ jobs:
 
     - name: Install Tools
       run: |
-        pip3 install adafruit-nrfutil uritemplate requests intelhex setuptools
+        pip3 install uritemplate requests intelhex setuptools
+        # Install the new standalone nrfutil
+        wget -q https://developer.nordicsemi.com/.pc-tools/nrfutil/x64-linux/nrfutil -O nrfutil
+        chmod +x nrfutil
+        sudo mv nrfutil /usr/local/bin/
+        nrfutil --version
+        nrfutil install nrf5sdk-tools
+        nrfutil list
+        # Make sure pkg and dfu commands are available
+        nrfutil pkg --help > /dev/null
+        nrfutil dfu --help > /dev/null
 
     - name: Build
       run: |
