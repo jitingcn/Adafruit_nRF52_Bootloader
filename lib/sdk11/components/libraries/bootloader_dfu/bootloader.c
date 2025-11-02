@@ -107,6 +107,11 @@ static void dfu_startup_timer_handler(void * p_context)
  *          when the final state of the firmware update is reached OR when a tear down is in
  *          progress.
  */
+
+// Button state tracking for double-press detection
+static uint32_t last_button_press_time = 0;
+static bool button_was_pressed = false;
+
 static void wait_for_events(void)
 {
   for ( ;; )
@@ -133,6 +138,43 @@ static void wait_for_events(void)
       tud_cdc_write_flush();
     }
 #endif
+
+    // Check for BUTTON_FRESET (BUTTON_2) double-press to exit DFU mode
+    // This allows users to exit DFU mode without flashing firmware
+    // Only allow exit when USB is NOT connected (to prevent accidental exit during flashing)
+    extern bool button_pressed(uint32_t pin);
+    extern uint32_t app_timer_cnt_get(void);
+    #ifndef BUTTON_FRESET
+    #define BUTTON_FRESET 2  // Default to BUTTON_2
+    #endif
+
+#ifdef NRF_USBD
+    // Check if USB VBUS is physically connected
+    uint32_t usb_reg = NRF_POWER->USBREGSTATUS;
+    bool vbus_present = (usb_reg & POWER_USBREGSTATUS_VBUSDETECT_Msk) != 0;
+
+    // Only allow button exit when USB is NOT connected
+    if (!vbus_present)
+#endif
+    {
+      bool button_current = button_pressed(BUTTON_FRESET);
+      uint32_t current_time = app_timer_cnt_get();
+
+      // Detect button press (transition from not pressed to pressed)
+      if (button_current && !button_was_pressed)
+      {
+        // Check if this is a double-press (within 500ms)
+        uint32_t time_diff = current_time - last_button_press_time;
+        // app_timer runs at 32768 Hz, 500ms = ~16384 ticks
+        if (time_diff < 16384)
+        {
+          // Double-press detected! Exit DFU mode
+          m_update_status = BOOTLOADER_TIMEOUT;
+        }
+        last_button_press_time = current_time;
+      }
+      button_was_pressed = button_current;
+    }
 
     if ((m_update_status == BOOTLOADER_COMPLETE) ||
         (m_update_status == BOOTLOADER_TIMEOUT) ||
