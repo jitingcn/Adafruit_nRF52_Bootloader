@@ -21,7 +21,17 @@ jobs:
         id: set-matrix
         working-directory: src/boards
         run: |
-          MATRIX_JSON=$(ls -d */ | sed 's/\/$//' | jq -R -s -c 'split("\n")[:-1]')
+          # Only build SlimeVR-related boards to keep CI time reasonable.
+          # Matches any board directory name containing one of:
+          #   slimevr, slimenrf, xiao_nrf52840, nice_nano
+          BOARD_LIST=$(find . -maxdepth 1 -mindepth 1 -type d -printf '%f\n' | grep -E '(slimevr|slimenrf|xiao_nrf52840|nice_nano)' || true)
+
+          if [ -z "$BOARD_LIST" ]; then
+            MATRIX_JSON='[]'
+          else
+            MATRIX_JSON=$(printf '%s\n' "$BOARD_LIST" | jq -R -s -c 'split("\n")[:-1]')
+          fi
+
           echo "matrix=$MATRIX_JSON"
           echo "matrix=$MATRIX_JSON" >> $GITHUB_OUTPUT
 
