@@ -38,8 +38,8 @@
 /* BUTTON
  *------------------------------------------------------------------*/
 #define BUTTONS_NUMBER    2  // none connected
-#define BUTTON_1          PINNUM(0, 18)  // RESET
-#define BUTTON_2          PINNUM(0, 6)  // no connection
+#define BUTTON_DFU          PINNUM(0, 18)  // RESET
+#define BUTTON_DFU_OTA          PINNUM(0, 6)  // no connection
 #define BUTTON_PULL       NRF_GPIO_PIN_PULLUP
 
 //--------------------------------------------------------------------+
