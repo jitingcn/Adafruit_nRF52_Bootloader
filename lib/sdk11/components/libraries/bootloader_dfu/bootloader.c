@@ -140,14 +140,12 @@ static void wait_for_events(void)
     }
 #endif
 
-    // Check for BUTTON_FRESET (BUTTON_2) double-press to exit DFU mode
+#if defined(BUTTON_DFU_OTA)
+    // Check for BUTTON_DFU_OTA (BUTTON_2) double-press to exit DFU mode
     // This allows users to exit DFU mode without flashing firmware
     // Only allow exit when USB is NOT connected (to prevent accidental exit during flashing)
     extern bool button_pressed(uint32_t pin);
     extern uint32_t app_timer_cnt_get(void);
-    #ifndef BUTTON_FRESET
-    #define BUTTON_FRESET 2  // Default to BUTTON_2
-    #endif
 
 #ifdef NRF_USBD
     // Check if USB VBUS is physically connected
@@ -158,7 +156,7 @@ static void wait_for_events(void)
     if (!vbus_present)
 #endif
     {
-      bool button_current = button_pressed(BUTTON_FRESET);
+      bool button_current = button_pressed(BUTTON_DFU_OTA);
       uint32_t current_time = app_timer_cnt_get();
 
       // Detect button press (transition from not pressed to pressed)
@@ -176,6 +174,7 @@ static void wait_for_events(void)
       }
       button_was_pressed = button_current;
     }
+#endif
 
     if ((m_update_status == BOOTLOADER_COMPLETE) ||
         (m_update_status == BOOTLOADER_TIMEOUT) ||
@@ -238,8 +237,8 @@ static void bootloader_settings_save(bootloader_settings_t * p_settings)
       }
       // This means the write/erase queue of commands was completely full - Should not
       //  happen, but better safe than sorry, wait until space becomes available -
-      //  the pstorage event handler is only run from the main loop, and we are also 
-      //  running from a BLE event on the main loop: This means if we wait here, the FLASH 
+      //  the pstorage event handler is only run from the main loop, and we are also
+      //  running from a BLE event on the main loop: This means if we wait here, the FLASH
       //  completion events will never be handled (will be queued by app_scheduler, but
       //  not handled, and that means this wait will never end... So, process SOC events
       //  from the SD (but NOT BLE events!) - This will free entries on the pstorage queue
