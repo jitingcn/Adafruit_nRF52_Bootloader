@@ -109,9 +109,13 @@ static void dfu_startup_timer_handler(void * p_context)
  *          progress.
  */
 
+bool bootloader_app_is_valid(void);
+
 // Button state tracking for double-press detection
-static uint32_t last_button_press_time = 0;
-static bool button_was_pressed = false;
+static uint32_t last_button_edge_time = 0;         // for debounce / edge filtering
+static uint32_t last_button_press_time = 0;        // for double-press window
+static bool     have_last_button_press_time = false;
+static bool     button_was_pressed = false;
 
 static void wait_for_events(void)
 {
@@ -141,37 +145,61 @@ static void wait_for_events(void)
 #endif
 
 #if defined(BUTTON_DFU_OTA)
-    // Check for BUTTON_DFU_OTA (BUTTON_2) double-press to exit DFU mode
-    // This allows users to exit DFU mode without flashing firmware
-    // Only allow exit when USB is NOT connected (to prevent accidental exit during flashing)
-    extern bool button_pressed(uint32_t pin);
-    extern uint32_t app_timer_cnt_get(void);
+    // Check for BUTTON_DFU_OTA (BUTTON_2) double-press to exit DFU mode.
+    // This allows users to exit DFU mode without flashing firmware.
+    // Only allow exit when USB VBUS is NOT present (to prevent accidental exit during flashing).
+
+    // Window definitions (in app_timer ticks)
+    enum
+    {
+      DFU_EXIT_DOUBLE_PRESS_WINDOW_TICKS = APP_TIMER_TICKS(500),
+      DFU_EXIT_DEBOUNCE_TICKS            = APP_TIMER_TICKS(50),
+    };
 
 #ifdef NRF_USBD
-    // Check if USB VBUS is physically connected
+    // Check if USB VBUS is physically connected.
     uint32_t usb_reg = NRF_POWER->USBREGSTATUS;
     bool vbus_present = (usb_reg & POWER_USBREGSTATUS_VBUSDETECT_Msk) != 0;
 
-    // Only allow button exit when USB is NOT connected
+    // Only allow button exit when USB is NOT connected.
     if (!vbus_present)
 #endif
     {
       bool button_current = button_pressed(BUTTON_DFU_OTA);
-      uint32_t current_time = app_timer_cnt_get();
 
       // Detect button press (transition from not pressed to pressed)
       if (button_current && !button_was_pressed)
       {
-        // Check if this is a double-press (within 500ms)
-        uint32_t time_diff = current_time - last_button_press_time;
-        // app_timer runs at 32768 Hz, 500ms = ~16384 ticks
-        if (time_diff < 16384)
+        uint32_t current_time = app_timer_cnt_get();
+
+        // Debounce: ignore edges that occur too close together.
+        uint32_t edge_diff = app_timer_cnt_diff_compute(current_time, last_button_edge_time);
+
+        if (edge_diff >= DFU_EXIT_DEBOUNCE_TICKS)
         {
-          // Double-press detected! Exit DFU mode
-          m_update_status = BOOTLOADER_TIMEOUT;
+          // Accepted edge.
+          last_button_edge_time = current_time;
+
+          // Only treat it as a double press if we have a previous press time.
+          if (have_last_button_press_time)
+          {
+            uint32_t time_diff = app_timer_cnt_diff_compute(current_time, last_button_press_time);
+
+            if (time_diff < DFU_EXIT_DOUBLE_PRESS_WINDOW_TICKS)
+            {
+              // Double-press detected: only exit DFU if there is a valid application to boot.
+              if (bootloader_app_is_valid())
+              {
+                m_update_status = BOOTLOADER_TIMEOUT;
+              }
+            }
+          }
+
+          last_button_press_time = current_time;
+          have_last_button_press_time = true;
         }
-        last_button_press_time = current_time;
       }
+
       button_was_pressed = button_current;
     }
 #endif
