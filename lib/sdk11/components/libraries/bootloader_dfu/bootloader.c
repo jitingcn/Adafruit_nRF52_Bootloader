@@ -111,11 +111,13 @@ static void dfu_startup_timer_handler(void * p_context)
 
 bool bootloader_app_is_valid(void);
 
+#if defined(BUTTON_DFU_OTA)
 // Button state tracking for double-press detection
 static uint32_t last_button_edge_time = 0;         // for debounce / edge filtering
 static uint32_t last_button_press_time = 0;        // for double-press window
 static bool     have_last_button_press_time = false;
 static bool     button_was_pressed = false;
+#endif
 
 static void wait_for_events(void)
 {
