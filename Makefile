@@ -382,7 +382,17 @@ ifeq ($(DEFAULT_TO_OTA_DFU), 1)
 CFLAGS += -DDEFAULT_TO_OTA_DFU
 endif
 
-_VER = $(subst ., ,$(word 1, $(subst -, ,$(GIT_VERSION))))
+# Derive semantic version (MAJOR.MINOR.PATCH) from git describe.
+# If there is no tag, `git describe --always` returns a commit hash (often starting with a digit),
+# which would break MK_BOOTLOADER_VERSION and cause errors like:
+#   invalid suffix "b96c8" on integer constant
+VER_TAG := $(patsubst v%,%,$(word 1,$(subst -, ,$(GIT_VERSION))))
+ifeq ($(filter %.%.%,$(VER_TAG)),)
+  _VER := 0 0 0
+else
+  _VER := $(subst ., ,$(VER_TAG))
+endif
+
 CFLAGS += -DMK_BOOTLOADER_VERSION='($(word 1,$(_VER)) << 16) + ($(word 2,$(_VER)) << 8) + $(word 3,$(_VER))'
 
 # Calculate bootloader version for nrfutil (same as MK_BOOTLOADER_VERSION but as make variable)
