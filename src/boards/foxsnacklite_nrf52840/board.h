@@ -1,7 +1,7 @@
 /*
  * The MIT License (MIT)
  *
- * Copyright (c) 2020 Nick Winans
+ * Copyright (c) 2018 Ha Thach for Adafruit Industries
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,32 +22,36 @@
  * THE SOFTWARE.
  */
 
-#ifndef _SLIMENRF_RECEIVER_STYRIA_R1_H
-#define _SLIMENRF_RECEIVER_STYRIA_R1_H
+#ifndef _FOXSNACKLITE
+#define _FOXSNACKLITE
 
-#define UICR_REGOUT0_VALUE UICR_REGOUT0_VOUT_3V3
+#define UICR_REGOUT0_VALUE UICR_REGOUT0_VOUT_2V7
+
 
 /*------------------------------------------------------------------*/
 /* LED
  *------------------------------------------------------------------*/
-#define LEDS_NUMBER       2
-#define LED_PRIMARY_PIN   PINNUM(0, 6) // Blue
-#define LED_SECONDARY_PIN PINNUM(0, 8) // Red
-#define LED_STATE_ON      1
+// The board has 2 leds, but changing the number here causes OTA issues.
+#define LEDS_NUMBER           1
+#define LED_PRIMARY_PIN       PINNUM(0, 31)
+#define LED_STATE_ON          1
+
+#define NEOPIXELS_NUMBER      0
 
 /*------------------------------------------------------------------*/
 /* BUTTON
  *------------------------------------------------------------------*/
-#define BUTTONS_NUMBER    2
-#define BUTTON_DFU          PINNUM(0, 18)
-#define BUTTON_DFU_OTA          PINNUM(0, 13)  // sw0
-#define BUTTON_PULL       NRF_GPIO_PIN_PULLUP
+#define BUTTONS_NUMBER        2
+#define BUTTON_DFU            PINNUM(0, 18)
+// Button 2 is from FoxSmol expansion board.
+#define BUTTON_DFU_OTA        PINNUM(0, 13)  // sw0
+#define BUTTON_PULL           NRF_GPIO_PIN_PULLUP
 
 //--------------------------------------------------------------------+
 // BLE OTA
 //--------------------------------------------------------------------+
-#define BLEDIS_MANUFACTURER  "Styria"
-#define BLEDIS_MODEL         "SlimeNRF Receiver Styria R1"
+#define BLEDIS_MANUFACTURER   "FoxApplication"
+#define BLEDIS_MODEL          "FoxSnackLite"
 
 //--------------------------------------------------------------------+
 // USB
@@ -56,9 +60,10 @@
 #define USB_DESC_UF2_PID       0x7693
 #define USB_DESC_CDC_ONLY_PID  0x7693
 
-#define UF2_PRODUCT_NAME  "SlimeVR SlimeNRF Receiver Styria R1"
-#define UF2_VOLUME_LABEL  "SLIMENRF"
-#define UF2_BOARD_ID      "slimevr-styria-receiver-r1"
-#define UF2_INDEX_URL     "https://github.com/SlimeVR"
+//------------- UF2 -------------//
+#define UF2_PRODUCT_NAME   "FoxApplication FoxSnackLite V1"
+#define UF2_VOLUME_LABEL   "FOX-BOOT"
+#define UF2_BOARD_ID       "FoxSnackLite-v1"
+#define UF2_INDEX_URL      "https://www.foxapplication.com/"
 
-#endif // _SLIMENRF_RECEIVER_STYRIA_R1_H
+#endif // _FOXSNACKLITE

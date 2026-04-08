@@ -25,23 +25,21 @@
 #ifndef _SLIMENRF_TRACKER_STYRIA_MINI_H
 #define _SLIMENRF_TRACKER_STYRIA_MINI_H
 
-#define _PINNUM(port, pin)    ((port)*32 + (pin))
-
 #define UICR_REGOUT0_VALUE UICR_REGOUT0_VOUT_3V3
 
 /*------------------------------------------------------------------*/
 /* LED
  *------------------------------------------------------------------*/
 #define LEDS_NUMBER       1
-#define LED_PRIMARY_PIN   _PINNUM(0, 15)
+#define LED_PRIMARY_PIN   PINNUM(0, 15)
 #define LED_STATE_ON      1
 
 /*------------------------------------------------------------------*/
 /* BUTTON
  *------------------------------------------------------------------*/
 #define BUTTONS_NUMBER    2  // none connected at all
-#define BUTTON_DFU          _PINNUM(0, 18)  // unusable: RESET
-#define BUTTON_DFU_OTA          _PINNUM(1, 0)  // sw0
+#define BUTTON_DFU        PINNUM(0, 18)  // RESET
+#define BUTTON_DFU_OTA    PINNUM(1, 0)   // sw0
 #define BUTTON_PULL       NRF_GPIO_PIN_PULLUP
 
 //--------------------------------------------------------------------+
