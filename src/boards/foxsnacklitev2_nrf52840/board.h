@@ -22,8 +22,8 @@
  * THE SOFTWARE.
  */
 
-#ifndef _FOXSNACKLITE
-#define _FOXSNACKLITE
+#ifndef _FOXSNACKLITEV2
+#define _FOXSNACKLITEV2
 
 #define UICR_REGOUT0_VALUE UICR_REGOUT0_VOUT_2V7
 
@@ -51,7 +51,7 @@
 // BLE OTA
 //--------------------------------------------------------------------+
 #define BLEDIS_MANUFACTURER   "FoxApplication"
-#define BLEDIS_MODEL          "FoxSnackLite"
+#define BLEDIS_MODEL          "FoxSnackLiteV2"
 
 //--------------------------------------------------------------------+
 // USB
@@ -66,4 +66,4 @@
 #define UF2_BOARD_ID       "FoxSnackLite-v2"
 #define UF2_INDEX_URL      "https://www.foxapplication.com/"
 
-#endif // _FOXSNACKLITE
+#endif // _FOXSNACKLITEV2
