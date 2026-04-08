@@ -61,9 +61,9 @@
 #define USB_DESC_CDC_ONLY_PID  0x7693
 
 //------------- UF2 -------------//
-#define UF2_PRODUCT_NAME   "FoxApplication FoxSnackLite V1"
+#define UF2_PRODUCT_NAME   "FoxApplication FoxSnackLite V2"
 #define UF2_VOLUME_LABEL   "FOX-BOOT"
-#define UF2_BOARD_ID       "FoxSnackLite-v1"
+#define UF2_BOARD_ID       "FoxSnackLite-v2"
 #define UF2_INDEX_URL      "https://www.foxapplication.com/"
 
 #endif // _FOXSNACKLITE
