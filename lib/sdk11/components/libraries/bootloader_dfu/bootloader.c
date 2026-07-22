@@ -34,6 +34,7 @@
 
 #ifdef NRF_USBD
 #include "tusb.h"
+#include "uf2/uf2.h"
 #endif
 
 /**@brief Enumeration for specifying current bootloader status.
@@ -58,6 +59,14 @@ APP_TIMER_DEF( _dfu_startup_timer );
 
 static void bootloader_timeout_startup_dfu(void)
 {
+    // Never leave DFU while a UF2 image is only partially written.
+#ifdef NRF_USBD
+    if (uf2_is_transfer_incomplete())
+    {
+        return;
+    }
+#endif
+
     if (!m_startup_dfu_has_activity)
     {
         dfu_update_status_t update_status;
@@ -214,8 +223,13 @@ static void wait_for_events(void)
 
             if (time_diff < DFU_EXIT_DOUBLE_PRESS_WINDOW_TICKS)
             {
-              // Double-press detected: only exit DFU if there is a valid application to boot.
-              if (bootloader_app_is_valid())
+              // Double-press detected: only exit DFU if there is a valid application
+              // to boot and no incomplete UF2 transfer in progress.
+              if (bootloader_app_is_valid()
+#ifdef NRF_USBD
+                  && !uf2_is_transfer_incomplete()
+#endif
+                 )
               {
                 m_update_status = BOOTLOADER_TIMEOUT;
               }

@@ -246,6 +246,36 @@ static inline bool in_uicr_space(uint32_t addr)
   return addr == 0x10001000;
 }
 
+// Invalidate bank0 before first flash mutation so a partial UF2 cannot boot.
+static void uf2_invalidate_app_bank(WriteState *state)
+{
+  if ( state->bank_invalidated )
+  {
+    return;
+  }
+
+  dfu_update_status_t update_status;
+  memset(&update_status, 0, sizeof(update_status));
+  update_status.status_code = DFU_BANK_0_ERASED;
+  bootloader_dfu_update_process(update_status);
+  state->bank_invalidated = true;
+}
+
+static void uf2_note_app_write(WriteState *state, uint32_t addr, uint32_t len)
+{
+  uint32_t const bank0 = DFU_BANK_0_REGION_START;
+  if ( addr + len <= bank0 )
+  {
+    return;
+  }
+
+  uint32_t const end = addr + len;
+  if ( end > state->app_end )
+  {
+    state->app_end = end;
+  }
+}
+
 //--------------------------------------------------------------------+
 //
 //--------------------------------------------------------------------+
@@ -411,7 +441,32 @@ int write_block (uint32_t block_no, uint8_t *data, WriteState *state)
 {
   UF2_Block *bl = (void*) data;
 
+  (void) block_no;
+
   if ( !is_uf2_block(bl) ) return -1;
+
+  // Single-transfer lock: after abort, reject further UF2 blocks until reset.
+  if ( state->aborted ) return -1;
+
+  // Lock numBlocks before any flash write. A second UF2 with a different size
+  // (typical dual-paste) must abort instead of poisoning completion forever.
+  if ( bl->numBlocks == 0 || bl->numBlocks >= MAX_BLOCKS )
+  {
+    state->aborted = true;
+    return -1;
+  }
+
+  if ( state->numBlocks == 0 )
+  {
+    state->numBlocks = bl->numBlocks;
+  }
+  else if ( state->numBlocks != bl->numBlocks )
+  {
+    PRINTF("UF2 numBlocks conflict %lu vs %lu\r\n",
+           (unsigned long) state->numBlocks, (unsigned long) bl->numBlocks);
+    state->aborted = true;
+    return -1;
+  }
 
   switch ( bl->familyID )
   {
@@ -439,7 +494,9 @@ int write_block (uint32_t block_no, uint8_t *data, WriteState *state)
       if ( in_app_space(bl->targetAddr) )
       {
         PRINTF("Write addr = 0x%08lX, block = %ld (%ld of %ld)\r\n", bl->targetAddr, bl->blockNo, state->numWritten, bl->numBlocks);
+        uf2_invalidate_app_bank(state);
         flash_nrf5x_write(bl->targetAddr, bl->data, bl->payloadSize, true);
+        uf2_note_app_write(state, bl->targetAddr, bl->payloadSize);
       }else if ( bl->targetAddr < USER_FLASH_START )
       {
         // do nothing if writing to MBR, occurs when SD hex is included
@@ -549,6 +606,7 @@ int write_block (uint32_t block_no, uint8_t *data, WriteState *state)
 
         // Offset to write the new bootloader address (skipping the App Data)
         uint32_t const offset_addr = BOOTLOADER_ADDR_END-USER_FLASH_END;
+        uf2_invalidate_app_bank(state);
         flash_nrf5x_write(bl->targetAddr-offset_addr, bl->data, bl->payloadSize, true);
       }
 #if 0 // don't allow bundle SoftDevice to prevent confusion
@@ -574,40 +632,27 @@ int write_block (uint32_t block_no, uint8_t *data, WriteState *state)
   }
 
   //------------- Update written blocks -------------//
-  if ( bl->numBlocks )
+  if ( bl->blockNo < MAX_BLOCKS )
   {
-    // Update state num blocks if needed
-    if ( state->numBlocks != bl->numBlocks )
+    uint8_t const mask = 1 << (bl->blockNo % 8);
+    uint32_t const pos = bl->blockNo / 8;
+
+    // only increase written number with new write (possibly prevent overwriting from OS)
+    if ( !(state->writtenMask[pos] & mask) )
     {
-      if ( bl->numBlocks >= MAX_BLOCKS || state->numBlocks )
-        state->numBlocks = 0xffffffff;
-      else
-        state->numBlocks = bl->numBlocks;
+      state->writtenMask[pos] |= mask;
+      state->numWritten++;
     }
 
-    if ( bl->blockNo < MAX_BLOCKS )
+    // flush last blocks
+    if ( state->numWritten >= state->numBlocks )
     {
-      uint8_t const mask = 1 << (bl->blockNo % 8);
-      uint32_t const pos = bl->blockNo / 8;
+      flash_nrf5x_flush(true);
 
-      // only increase written number with new write (possibly prevent overwriting from OS)
-      if ( !(state->writtenMask[pos] & mask) )
+      // Failed if update bootloader without UCIR value
+      if ( state->update_bootloader && !state->has_uicr )
       {
-        state->writtenMask[pos] |= mask;
-        state->numWritten++;
-      }
-
-      // flush last blocks
-      // TODO numWritten can be smaller than numBlocks if return early
-      if ( state->numWritten >= state->numBlocks )
-      {
-        flash_nrf5x_flush(true);
-
-        // Failed if update bootloader without UCIR value
-        if ( state->update_bootloader && !state->has_uicr )
-        {
-          state->aborted = true;
-        }
+        state->aborted = true;
       }
     }
   }

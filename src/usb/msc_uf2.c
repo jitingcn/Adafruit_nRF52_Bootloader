@@ -28,6 +28,9 @@
 #if CFG_TUD_MSC
 
 #include "bootloader.h"
+#include "crc16.h"
+#include "dfu_types.h"
+#include <string.h>
 
 /*------------------------------------------------------------------*/
 /* MACRO TYPEDEF CONSTANT ENUM
@@ -40,6 +43,27 @@ static WriteState _wr_state = { 0 };
 
 void read_block(uint32_t block_no, uint8_t *data);
 int  write_block(uint32_t block_no, uint8_t *data, WriteState *state);
+
+bool uf2_is_transfer_incomplete(void)
+{
+  return (_wr_state.numBlocks != 0) &&
+         (_wr_state.numWritten > 0) &&
+         (_wr_state.numWritten < _wr_state.numBlocks);
+}
+
+static void uf2_ensure_bank_invalid(void)
+{
+  if ( _wr_state.bank_invalidated )
+  {
+    return;
+  }
+
+  dfu_update_status_t update_status;
+  memset(&update_status, 0, sizeof(update_status));
+  update_status.status_code = DFU_BANK_0_ERASED;
+  bootloader_dfu_update_process(update_status);
+  _wr_state.bank_invalidated = true;
+}
 
 //--------------------------------------------------------------------+
 // tinyusb callbacks
@@ -172,18 +196,26 @@ void tud_msc_write10_complete_cb(uint8_t lun)
 {
   static bool first_write = true;
 
-  // abort the DFU, uf2 block failed integrity check
+  // abort the DFU, uf2 block failed integrity check / dual-file conflict
   if ( _wr_state.aborted )
   {
-    // aborted and reset
     PRINTF("Aborted\r\n");
+
+    // Keep bank invalid so a half-written image cannot be treated as bootable.
+    uf2_ensure_bank_invalid();
 
     dfu_update_status_t update_status;
     memset(&update_status, 0, sizeof(dfu_update_status_t ));
     update_status.status_code = DFU_RESET;
-    update_status.restart_into_bootloader = false;
+    // Re-enter bootloader after reset; do not attempt to launch a broken app.
+    update_status.restart_into_bootloader = true;
 
     bootloader_dfu_update_process(update_status);
+
+    // Clear transfer bookkeeping; aborted stays set until reboot.
+    memset(&_wr_state, 0, sizeof(_wr_state));
+    _wr_state.aborted = true;
+    _wr_state.bank_invalidated = true;
 
     led_state(STATE_WRITING_FINISHED);
   }
@@ -232,10 +264,30 @@ void tud_msc_write10_complete_cb(uint8_t lun)
         PRINTF("bootloader update complete\r\n");
       }else
       {
-        // update App
-        update_status.status_code = DFU_UPDATE_APP_COMPLETE;
-
-        PRINTF("Application update complete\r\n");
+        // update App — store real size/CRC so bootloader_app_is_valid() cannot
+        // skip integrity checks (legacy path used app_crc=0 to mean "no CRC").
+        uint32_t const app_addr = DFU_BANK_0_REGION_START;
+        if ( _wr_state.app_end > app_addr )
+        {
+          update_status.app_size = _wr_state.app_end - app_addr;
+          update_status.app_crc  = crc16_compute((uint8_t const *) app_addr,
+                                                 update_status.app_size, NULL);
+          // 0 is reserved for "CRC unused"; force a non-zero sentinel if needed.
+          if ( update_status.app_crc == 0 )
+          {
+            update_status.app_crc = 1;
+          }
+          update_status.status_code = DFU_UPDATE_APP_COMPLETE;
+          PRINTF("Application update complete\r\n");
+        }
+        else
+        {
+          // No bytes landed in bank0 — do not mark app valid.
+          PRINTF("UF2 complete without bank0 payload\r\n");
+          uf2_ensure_bank_invalid();
+          update_status.status_code = DFU_RESET;
+          update_status.restart_into_bootloader = true;
+        }
       }
 
       bootloader_dfu_update_process(update_status);
@@ -275,6 +327,13 @@ bool tud_msc_start_stop_cb(uint8_t lun, uint8_t power_condition, bool start, boo
   }
 
   return true;
+}
+
+#else /* !CFG_TUD_MSC */
+
+bool uf2_is_transfer_incomplete(void)
+{
+  return false;
 }
 
 #endif

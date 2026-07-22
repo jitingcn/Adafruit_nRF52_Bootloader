@@ -52,11 +52,13 @@ SOFTWARE.
 typedef struct {
     uint32_t numBlocks;
     uint32_t numWritten;
+    uint32_t app_end;         // exclusive end of highest app-space write (>= bank0)
 
     bool aborted;             // aborting update and reset
     bool update_bootloader;   // if updating bootloader (else app)
     bool has_uicr;            // if containing uicr data
     bool boot_id_matches;     // if bootloader id in cf2 config matches our VID/PID
+    bool bank_invalidated;    // BANK_INVALID_APP written for this transfer
 
     uint8_t writtenMask[MAX_BLOCKS / 8 + 1];
 } WriteState;
@@ -80,5 +82,8 @@ typedef struct {
 } UF2_Block;
 
 void uf2_init(void);
+
+/** True when a UF2 transfer started but not all blocks received. */
+bool uf2_is_transfer_incomplete(void);
 
 #endif
