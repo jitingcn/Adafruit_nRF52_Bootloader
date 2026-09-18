@@ -25,29 +25,26 @@
 #ifndef _SPIRO_MIRO_BOARD_H
 #define _SPIRO_MIRO_BOARD_H
 
-#define _PINNUM(port, pin)    ((port)*32 + (pin))
-
 /*------------------------------------------------------------------*/
 /* DC/DC
  *------------------------------------------------------------------*/
-
 #define ENABLE_DCDC_1         1
 
 /*------------------------------------------------------------------*/
 /* LED
  *------------------------------------------------------------------*/
 #define LEDS_NUMBER           3
-#define LED_PRIMARY_PIN       _PINNUM(0, 20)
-#define LED_SECONDARY_PIN     _PINNUM(0, 9)
-#define LED_TERTIARY_PIN      _PINNUM(0, 17)
+#define LED_PRIMARY_PIN       PINNUM(0, 20)
+#define LED_SECONDARY_PIN     PINNUM(0, 9)
+#define LED_TERTIARY_PIN      PINNUM(0, 17)
 #define LED_STATE_ON          1
 
 /*------------------------------------------------------------------*/
 /* BUTTON
  *------------------------------------------------------------------*/
 #define BUTTONS_NUMBER        2
-#define BUTTON_DFU            _PINNUM(0, 18)  // Reset pad
-#define BUTTON_DFU_OTA        _PINNUM(0, 15)  // SW0 user button
+#define BUTTON_DFU            PINNUM(0, 18)  // Reset pad
+#define BUTTON_DFU_OTA        PINNUM(0, 15)  // SW0 user button
 #define BUTTON_PULL           NRF_GPIO_PIN_PULLUP
 
 //--------------------------------------------------------------------+
