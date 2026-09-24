@@ -1,0 +1,2 @@
+set(MCU_VARIANT nrf52833)
+set(SD_VERSION 7.3.0)
