@@ -371,12 +371,15 @@ void led_pwm_duty_cycle(uint32_t led_index, uint16_t duty_cycle) {
   nrf_pwm_task_trigger(NRF_PWM0, NRF_PWM_TASK_SEQSTART0);
 }
 
-static uint32_t primary_cycle_length;
+// SysTick starts before the first state update; USB-only DFU may never set
+// the secondary period. Start both LEDs with the bootloader cadence.
+static uint32_t primary_cycle_length = 300;
 #ifdef LED_SECONDARY_PIN
-static uint32_t secondary_cycle_length;
+static uint32_t secondary_cycle_length = 300;
 #endif
 
 void led_tick(void) {
+#if LEDS_NUMBER > 0
   uint32_t millis = _systick_count;
 
   uint32_t cycle = millis % primary_cycle_length;
@@ -402,6 +405,7 @@ void led_tick(void) {
   #endif
   led_pwm_duty_cycle(LED_SECONDARY, duty_cycle);
   #endif
+#endif
 }
 
 static uint32_t rgb_color;
@@ -478,9 +482,22 @@ void led_state(uint32_t state) {
 #ifdef LED_NEOPIXEL
 
 // WS2812B (rev B) timing is 0.4 and 0.8 us
-#define MAGIC_T0H               6UL | (0x8000) // 0.375us
-#define MAGIC_T1H              13UL | (0x8000) // 0.8125us
+#ifdef LED_NEOPIXEL_INVERTED
+#define NEOPIXEL_PWM_POLARITY 0
+#define NEOPIXEL_PIN_IDLE_STATE 1
+#else
+#define NEOPIXEL_PWM_POLARITY 0x8000
+#define NEOPIXEL_PIN_IDLE_STATE 0
+#endif
+
+#define NEOPIXEL_PWM_VALUE(high_ticks) ((high_ticks) | NEOPIXEL_PWM_POLARITY)
+
+#define MAGIC_T0H               NEOPIXEL_PWM_VALUE(6UL)  // 0.375us
+#define MAGIC_T1H               NEOPIXEL_PWM_VALUE(13UL) // 0.8125us
+#define MAGIC_RESET             NEOPIXEL_PWM_VALUE(0UL)
 #define CTOPVAL                20UL            // 1.25us
+// Newer WS2812 variants require >280us low, not the older 50us reset.
+#define NEOPIXEL_RESET_US       300
 
 #define BYTE_PER_PIXEL  3
 
@@ -488,13 +505,8 @@ static uint16_t pixels_pattern[NEOPIXELS_NUMBER * BYTE_PER_PIXEL * 8 + 2];
 
 // use PWM1 for neopixel
 void neopixel_init(void) {
-  // To support both the SoftDevice + Neopixels we use the EasyDMA
-  // feature from the NRF25. However this technique implies to
-  // generate a pattern and store it on the memory. The actual
-  // memory used in bytes corresponds to the following formula:
-  //              totalMem = numBytes*8*2+(2*2)
-  // The two additional bytes at the end are needed to reset the
-  // sequence.
+  // EasyDMA stores one half-word per data bit plus two idle samples.
+  // The reset/latch interval is timed after PWM has stopped, not by padding.
   NRF_PWM_Type* pwm = NRF_PWM1;
 
   // Set the wave mode to count UP
@@ -511,30 +523,26 @@ void neopixel_init(void) {
   // for supported sequences. The pattern is stored on half-word of 16bits
   nrf_pwm_decoder_set(pwm, PWM_DECODER_LOAD_Common, PWM_DECODER_MODE_RefreshCount);
 
-  // The following settings are ignored with the current config.
+  // Play each sample once with no extra end delay.
   nrf_pwm_seq_refresh_set(pwm, 0, 0);
   nrf_pwm_seq_end_delay_set(pwm, 0, 0);
 
-  // The Neopixel implementation is a blocking algorithm. DMA
-  // allows for non-blocking operation. To "simulate" a blocking
-  // operation we enable the interruption for the end of sequence
-  // and block the execution thread until the event flag is set by
-  // the peripheral.
-  //    pwm->INTEN |= (PWM_INTEN_SEQEND0_Enabled<<PWM_INTEN_SEQEND0_Pos);
-
   // PSEL must be configured before enabling PWM
+  nrf_gpio_pin_write(LED_NEOPIXEL, NEOPIXEL_PIN_IDLE_STATE);
+  nrf_gpio_cfg_output(LED_NEOPIXEL);
   nrf_pwm_pins_set(pwm, (uint32_t[]) {LED_NEOPIXEL, 0xFFFFFFFFUL, 0xFFFFFFFFUL, 0xFFFFFFFFUL});
 
   // Enable the PWM
   nrf_pwm_enable(pwm);
+
+  // Establish a reset interval before the first frame.
+  NRFX_DELAY_US(NEOPIXEL_RESET_US);
 }
 
 void neopixel_teardown(void) {
   uint8_t rgb[3] = {0, 0, 0};
 
-  NRFX_DELAY_US(50);  // wait for previous write is complete
   neopixel_write(rgb);
-  NRFX_DELAY_US(50);  // wait for this write
   pwm_teardown(NRF_PWM1);
 }
 
@@ -556,9 +564,9 @@ void neopixel_write(uint8_t* pixels) {
     }
   }
 
-  // Zero padding to indicate the end of sequence
-  pixels_pattern[pos++] = 0 | (0x8000);    // Seq end
-  pixels_pattern[pos++] = 0 | (0x8000);    // Seq end
+  // Finish at the same physical idle level for normal and inverted outputs.
+  pixels_pattern[pos++] = MAGIC_RESET;
+  pixels_pattern[pos++] = MAGIC_RESET;
 
   NRF_PWM_Type* pwm = NRF_PWM1;
 
@@ -567,9 +575,16 @@ void neopixel_write(uint8_t* pixels) {
   nrf_pwm_event_clear(pwm, NRF_PWM_EVENT_SEQEND0);
   nrf_pwm_task_trigger(pwm, NRF_PWM_TASK_SEQSTART0);
 
-  // blocking wait for sequence complete
+  // SEQEND only means the last sample was read from RAM, not output complete.
   while (!nrf_pwm_event_check(pwm, NRF_PWM_EVENT_SEQEND0)) {}
   nrf_pwm_event_clear(pwm, NRF_PWM_EVENT_SEQEND0);
+  nrf_pwm_event_clear(pwm, NRF_PWM_EVENT_STOPPED);
+  nrf_pwm_task_trigger(pwm, NRF_PWM_TASK_STOP);
+  while (!nrf_pwm_event_check(pwm, NRF_PWM_EVENT_STOPPED)) {}
+
+  // STOPPED leaves the pin at its configured GPIO idle level. Keep the LED
+  // input low long enough to latch before another write or GPIO teardown.
+  NRFX_DELAY_US(NEOPIXEL_RESET_US);
 }
 
 #endif
