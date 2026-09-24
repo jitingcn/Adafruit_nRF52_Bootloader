@@ -59,6 +59,8 @@ typedef struct {
     bool has_uicr;            // if containing uicr data
     bool boot_id_matches;     // if bootloader id in cf2 config matches our VID/PID
     bool bank_invalidated;    // BANK_INVALID_APP written for this transfer
+    bool bootloader_staging_checked; // app preservation decided before staging
+    bool preserve_app_bank;   // verified app lies below every staging erase page
 
     uint8_t writtenMask[MAX_BLOCKS / 8 + 1];
 } WriteState;

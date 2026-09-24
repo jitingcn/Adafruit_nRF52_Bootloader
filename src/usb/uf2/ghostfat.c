@@ -35,6 +35,7 @@
 
 #include "bootloader_settings.h"
 #include "bootloader.h"
+#include "crc16.h"
 
 //--------------------------------------------------------------------+
 //
@@ -249,6 +250,7 @@ static inline bool in_uicr_space(uint32_t addr)
 // Invalidate bank0 before first flash mutation so a partial UF2 cannot boot.
 static void uf2_invalidate_app_bank(WriteState *state)
 {
+  state->preserve_app_bank = false;
   if ( state->bank_invalidated )
   {
     return;
@@ -259,6 +261,46 @@ static void uf2_invalidate_app_bank(WriteState *state)
   update_status.status_code = DFU_BANK_0_ERASED;
   bootloader_dfu_update_process(update_status);
   state->bank_invalidated = true;
+}
+
+// Preserve only a CRC-verified app outside every page staging can erase.
+static void uf2_prepare_bootloader_staging(WriteState *state)
+{
+  if ( !state->bootloader_staging_checked )
+  {
+    state->bootloader_staging_checked = true;
+
+    // Check the complete staging reservation, not just the first UF2 payload.
+    if ( !state->bank_invalidated &&
+         USER_FLASH_END >= USER_FLASH_START &&
+         USER_FLASH_END <= BOOTLOADER_ADDR_START &&
+         DFU_BL_IMAGE_MAX_SIZE <= USER_FLASH_END - USER_FLASH_START )
+    {
+      uint32_t const staging_page_start =
+        BOOTLOADER_ADDR_NEW_RECEIVED & ~(CODE_PAGE_SIZE - 1UL);
+      uint32_t const app_addr = DFU_BANK_0_REGION_START;
+      bootloader_settings_t const *settings;
+      bootloader_util_settings_get(&settings);
+
+      // Subtract only after ordering addresses, avoiding overflow from app+size.
+      if ( settings->bank_0 == BANK_VALID_APP &&
+           settings->bank_0_crc != 0 &&
+           settings->bank_0_size >= 8 &&
+           app_addr >= USER_FLASH_START &&
+           app_addr <= staging_page_start &&
+           settings->bank_0_size <= staging_page_start - app_addr )
+      {
+        state->preserve_app_bank =
+          crc16_compute((uint8_t const *) app_addr, settings->bank_0_size, NULL) ==
+          settings->bank_0_crc;
+      }
+    }
+  }
+
+  if ( !state->preserve_app_bank )
+  {
+    uf2_invalidate_app_bank(state);
+  }
 }
 
 static void uf2_note_app_write(WriteState *state, uint32_t addr, uint32_t len)
@@ -520,8 +562,8 @@ int write_block (uint32_t block_no, uint8_t *data, WriteState *state)
        * - Along with bootloader code, UCIR (at 0x1000100) is also included containing
        * 0x10001014 (bootloader address), and 0x10001018 (MBR Params address).
        *
-       * Note: part of the existing application can be affected when updating bootloader.
-       * TODO May be worth to have some kind crc/application integrity checking
+       * Only a verified application below all staging pages keeps its metadata.
+       * Overlapping or unknown applications are invalidated before staging.
        *
        *                         -------------         -------------         -------------
        *                        |             |       |             |     + |     New     |
@@ -606,7 +648,7 @@ int write_block (uint32_t block_no, uint8_t *data, WriteState *state)
 
         // Offset to write the new bootloader address (skipping the App Data)
         uint32_t const offset_addr = BOOTLOADER_ADDR_END-USER_FLASH_END;
-        uf2_invalidate_app_bank(state);
+        uf2_prepare_bootloader_staging(state);
         flash_nrf5x_write(bl->targetAddr-offset_addr, bl->data, bl->payloadSize, true);
       }
 #if 0 // don't allow bundle SoftDevice to prevent confusion

@@ -199,8 +199,13 @@ void tud_msc_write10_complete_cb(uint8_t lun)
   {
     PRINTF("Aborted\r\n");
 
-    // Keep bank invalid so a half-written image cannot be treated as bootable.
-    uf2_ensure_bank_invalid();
+    // A BL-only abort leaves a verified app below staging untouched.
+    bool const preserve_app_bank =
+      _wr_state.preserve_app_bank && !_wr_state.bank_invalidated;
+    if ( !preserve_app_bank )
+    {
+      uf2_ensure_bank_invalid();
+    }
 
     dfu_update_status_t update_status;
     memset(&update_status, 0, sizeof(dfu_update_status_t ));
@@ -213,7 +218,8 @@ void tud_msc_write10_complete_cb(uint8_t lun)
     // Clear transfer bookkeeping; aborted stays set until reboot.
     memset(&_wr_state, 0, sizeof(_wr_state));
     _wr_state.aborted = true;
-    _wr_state.bank_invalidated = true;
+    _wr_state.bank_invalidated = !preserve_app_bank;
+    _wr_state.preserve_app_bank = preserve_app_bank;
 
     led_state(STATE_WRITING_FINISHED);
   }
