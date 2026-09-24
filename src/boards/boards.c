@@ -44,7 +44,8 @@ void neopixel_teardown(void);
 // IMPLEMENTATION
 //--------------------------------------------------------------------+
 
-static uint32_t _systick_count = 0;
+static volatile uint32_t _systick_count = 0;
+static bool led_task_enabled = false;
 void SysTick_Handler(void) {
   _systick_count++;
   led_tick();
@@ -147,12 +148,14 @@ void board_init(void) {
   // Configure Systick for led blinky
   NVIC_SetPriority(SysTick_IRQn, 7);
   SysTick_Config(SystemCoreClock / 1000);
+  led_task_enabled = true;
 }
 
 // Actions at the end of board_teardown.
 void __attribute__((weak)) board_teardown2(void) {}
 
 void board_teardown(void) {
+  led_task_enabled = false;
   // Disable systick, turn off LEDs
   SysTick->CTRL = 0;
 
@@ -410,34 +413,93 @@ void led_tick(void) {
 
 static uint32_t rgb_color;
 static bool temp_color_active = false;
+#if defined(LED_NEOPIXEL) || defined(LED_RGB_RED_PIN) || defined(LED_APA102_CLK)
+static uint32_t rendered_rgb_color = UINT32_MAX;
+#endif
+#ifdef LED_NEOPIXEL
+static uint32_t rgb_cycle_length = 300;
+static uint32_t rgb_phase;
+static uint32_t rgb_last_millis;
+static bool rgb_state_changed = true;
+#endif
+
+// Called only from the main loop, never from SysTick: pixel writes wait for
+// PWM completion and the WS2812 reset interval.
+void led_task(void) {
+  if (!led_task_enabled) {
+    return;
+  }
+#if defined(LED_NEOPIXEL) || defined(LED_RGB_RED_PIN) || defined(LED_APA102_CLK)
+  uint32_t color = temp_color_active ? (0xff0000 & BOARD_RGB_BRIGHTNESS) : rgb_color;
+#ifdef LED_NEOPIXEL
+  uint32_t const millis = _systick_count;
+  if (millis == rgb_last_millis && !rgb_state_changed) {
+    return;
+  }
+  rgb_state_changed = false;
+  uint32_t const period = temp_color_active ? 100 : rgb_cycle_length;
+  // Accumulate elapsed time, not serviced frames; unsigned subtraction also
+  // keeps the phase continuous when the millisecond counter wraps.
+  rgb_phase = (rgb_phase + (millis - rgb_last_millis) % period) % period;
+  rgb_last_millis = millis;
+  if (temp_color_active) {
+    if (rgb_phase >= period / 2) {
+      color = 0;
+    }
+  } else {
+    uint32_t const half_cycle = period / 2;
+    uint32_t const level = rgb_phase < half_cycle ?
+                           half_cycle - rgb_phase : rgb_phase - half_cycle;
+    // Keep the existing little-endian B,G,R layout and per-channel peak.
+    // Low board brightness deliberately gives fewer steps, not a brighter LED.
+    uint8_t* channels = (uint8_t*) &color;
+    for (uint32_t i = 0; i < 3; i++) {
+      channels[i] = (channels[i] * level + half_cycle / 2) / half_cycle;
+    }
+  }
+#endif
+  if (color != rendered_rgb_color) {
+    neopixel_write((uint8_t*) &color);
+    rendered_rgb_color = color;
+  }
+#endif
+}
 
 void led_state(uint32_t state) {
-  uint32_t new_rgb_color = rgb_color;
-  uint32_t temp_color = 0;
+#ifdef LED_NEOPIXEL
+  uint32_t const old_color = rgb_color;
+  uint32_t const old_cycle = rgb_cycle_length;
+  bool const was_writing = temp_color_active;
+#endif
+  // Transport disconnects can end a write without a WRITING_FINISHED event.
+  // Drop the override so idle/reconnected DFU does not retain a stale red blink.
+  if (state == STATE_USB_UNMOUNTED || state == STATE_BLE_DISCONNECTED) {
+    temp_color_active = false;
+  }
   switch (state) {
     case STATE_USB_MOUNTED:
-      new_rgb_color = 0x00ff00;
+      rgb_color = 0x00ff00 & BOARD_RGB_BRIGHTNESS;
       primary_cycle_length = 3000;
       break;
 
     case STATE_BOOTLOADER_STARTED:
     case STATE_USB_UNMOUNTED:
-      new_rgb_color = 0xff0000;
+      rgb_color = 0xff0000 & BOARD_RGB_BRIGHTNESS;
       primary_cycle_length = 300;
       break;
 
     case STATE_WRITING_STARTED:
-      temp_color = 0xff0000;
+      temp_color_active = true;
       primary_cycle_length = 100;
       break;
 
     case STATE_WRITING_FINISHED:
-      // Empty means to unset any temp colors.
+      temp_color_active = false;
       primary_cycle_length = 3000;
       break;
 
     case STATE_BLE_CONNECTED:
-      new_rgb_color = 0x0000ff;
+      rgb_color = 0x0000ff & BOARD_RGB_BRIGHTNESS;
       #ifdef LED_SECONDARY_PIN
       secondary_cycle_length = 3000;
       #else
@@ -446,7 +508,7 @@ void led_state(uint32_t state) {
       break;
 
     case STATE_BLE_DISCONNECTED:
-      new_rgb_color = 0xff00ff;
+      rgb_color = 0xff00ff & BOARD_RGB_BRIGHTNESS;
       #ifdef LED_SECONDARY_PIN
       secondary_cycle_length = 300;
       #else
@@ -455,28 +517,32 @@ void led_state(uint32_t state) {
       break;
 
     default:
-      break;
+      return;
   }
-  uint8_t* final_color = NULL;
-  new_rgb_color &= BOARD_RGB_BRIGHTNESS;
-  if (temp_color != 0) {
-    temp_color &= BOARD_RGB_BRIGHTNESS;
-    final_color = (uint8_t*) &temp_color;
-    temp_color_active = true;
-  } else if (new_rgb_color != rgb_color) {
-    final_color = (uint8_t*) &new_rgb_color;
-    rgb_color = new_rgb_color;
-  } else if (temp_color_active) {
-    final_color = (uint8_t*) &rgb_color;
+#ifndef LED_NEOPIXEL
+  // Static RGB indicators historically show each base-state event immediately.
+  if (state != STATE_WRITING_STARTED) {
+    temp_color_active = false;
   }
-
-#if defined(LED_NEOPIXEL) || defined(LED_RGB_RED_PIN) || defined(LED_APA102_CLK)
-  if (final_color != NULL) {
-    neopixel_write(final_color);
-  }
-#else
-  (void) final_color;
 #endif
+#ifdef LED_NEOPIXEL
+  // A secondary discrete LED must not determine the RGB status cadence.
+  if (state == STATE_USB_MOUNTED || state == STATE_BLE_CONNECTED) {
+    rgb_cycle_length = 3000;
+  } else if (state == STATE_BOOTLOADER_STARTED || state == STATE_USB_UNMOUNTED ||
+             state == STATE_BLE_DISCONNECTED) {
+    rgb_cycle_length = 300;
+  }
+  if (was_writing != temp_color_active ||
+      (!temp_color_active && (old_color != rgb_color || old_cycle != rgb_cycle_length))) {
+    // Show each new status immediately at its configured peak. Repeated BLE
+    // write packets must not restart the blink and leave it permanently on.
+    rgb_phase = 0;
+    rgb_last_millis = _systick_count;
+    rgb_state_changed = true;
+  }
+#endif
+  led_task();
 }
 
 #ifdef LED_NEOPIXEL

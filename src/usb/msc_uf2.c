@@ -194,8 +194,6 @@ int32_t tud_msc_write10_cb (uint8_t lun, uint32_t lba, uint32_t offset, uint8_t*
 // Callback invoked when WRITE10 command is completed (status received and accepted by host).
 void tud_msc_write10_complete_cb(uint8_t lun)
 {
-  static bool first_write = true;
-
   // abort the DFU, uf2 block failed integrity check / dual-file conflict
   if ( _wr_state.aborted )
   {
@@ -221,12 +219,9 @@ void tud_msc_write10_complete_cb(uint8_t lun)
   }
   else if ( _wr_state.numBlocks )
   {
-    // Start LED writing pattern with first write
-    if (first_write)
-    {
-      first_write = false;
-      led_state(STATE_WRITING_STARTED);
-    }
+    // Reassert writing after a USB unmount/re-enumeration. Repeated starts
+    // preserve the animation phase and do not resend an unchanged color.
+    led_state(STATE_WRITING_STARTED);
 
     // All block of uf2 file is complete --> complete DFU process
     if (_wr_state.numWritten >= _wr_state.numBlocks)

@@ -179,6 +179,8 @@ static void wait_for_events(void)
       bootloader_timeout_startup_dfu();
     }
 #endif
+    // Render the current RGB phase, without queueing a frame for each tick.
+    led_task();
 
 #if defined(BUTTON_DFU_OTA)
     // Check for BUTTON_DFU_OTA (BUTTON_2) double-press to exit DFU mode.
