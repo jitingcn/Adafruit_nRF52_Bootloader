@@ -111,7 +111,7 @@ Pre-builtin binaries are available on GitHub [releases](https://github.com/adafr
 Note: The bootloader can be downgraded. Since the binary release is a merged version of
 both bootloader and the Nordic SoftDevice, you can freely upgrade/downgrade to any version you like.
 
-## How to compile and build 
+## How to compile and build
 
 You should only continue if you are looking to develop bootloader for your own.
 You must have have a J-Link available to "unbrick" your device.
@@ -160,7 +160,7 @@ Firstly initialize your build environment by passing your board to `cmake` via `
 ```bash
 mkdir build
 cd build
-cmake .. -DBOARD=feather_nrf52840_express 
+cmake .. -DBOARD=feather_nrf52840_express
 ```
 
 And then build it with:
@@ -175,7 +175,7 @@ To list all supported targets, run:
 
 ```bash
 cmake --build . --target help
-``` 
+```
 
 To build individual targets, you can specify it directly with `make` or using `cmake --build`:
 
@@ -183,6 +183,55 @@ To build individual targets, you can specify it directly with `make` or using `c
 make bootloader
 cmake --build . --target bootloader
 ```
+
+#### One-time USB bootloader identity migration
+
+Use this only when the physical board remains compatible and a corrected board
+definition changes its USB VID/UF2 PID. It is not a cross-board flashing bypass.
+The installed bootloader compares the incoming CF2 key 208 against its own USB
+VID/PID; changing the new bootloader's receive policy cannot bypass that old check.
+
+The explicit `migration-uf2` target packages the standard no-SoftDevice UF2,
+changing only CF2 key 208 to the installed identity. Runtime USB descriptors and
+all receive checks remain those of the new standard bootloader. Neither `all`
+nor the ordinary release-copy target includes migration artifacts.
+
+Both IDs are required as `0xVVVVPPPP`. `SOURCE_ID` is the installed bootloader's
+USB VID/UF2 PID (not its CDC PID or text Board-ID); `TARGET_ID` is the independently
+verified identity of the new standard board definition. The packager checks the
+input CF2 against the target ID before making any change.
+
+Example: For SKPastry P10 `1209:7694` to this branch's P10 `1209:7693`, from this repository:
+
+```bash
+make BOARD=sk_cheesecake_nrf_p10 migration-uf2 \
+  BOOTLOADER_MIGRATION_SOURCE_ID=0x12097694 \
+  BOOTLOADER_MIGRATION_TARGET_ID=0x12097693
+```
+
+Or with CMake:
+
+```bash
+cmake -S . -B cmake-build-sk_cheesecake_nrf_p10 \
+  -DBOARD=sk_cheesecake_nrf_p10 \
+  -DBOOTLOADER_MIGRATION_SOURCE_ID=0x12097694 \
+  -DBOOTLOADER_MIGRATION_TARGET_ID=0x12097693
+cmake --build cmake-build-sk_cheesecake_nrf_p10 --target migration-uf2
+```
+
+Migration procedure:
+
+1. Verify the actual installed USB identity, physical board compatibility,
+   bootloader start and MBR parameter-page addresses. Have SWD recovery available
+   for initial hardware validation.
+2. Copy only the dedicated migration UF2 to the old bootloader's USB drive.
+3. After it restarts, re-enter the bootloader and verify the new USB identity.
+4. Copy the **standard** no-SoftDevice UF2 from the same build
+   (`bootloader_mbr.uf2` with CMake; `update-..._nosd.uf2` with Make).
+   This restores CF2 to the new identity without relaxing any checks.
+5. Reinstall the application if necessary. The old bootloader handles the first
+   transfer and can invalidate or overwrite application storage; the new
+   bootloader's application-preservation fixes do not protect that first step.
 
 ### Flash
 
@@ -261,7 +310,7 @@ adafruit-nrfutil dfu genpkg --dev-type 0x0052 --sd-req 0x0123 --application "app
 
 Please, use full paths for all files. The examples omit them for clarity!
 
-And, to upload it to your device, 
+And, to upload it to your device,
 
 ```
 adafruit-nrfutil.exe --verbose dfu serial -pkg "application_package.zip" -p /dev/tty0 -b 115200

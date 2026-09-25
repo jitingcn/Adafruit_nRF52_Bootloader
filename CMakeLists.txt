@@ -349,6 +349,19 @@ add_custom_command(TARGET bootloader POST_BUILD
   COMMAND ${Python_EXECUTABLE} ${UF2CONV_PY} -f ${UF2_FAMILY_ID_BOOTLOADER} -c -o $<TARGET_FILE_DIR:bootloader>/bootloader_mbr.uf2 $<TARGET_FILE_DIR:bootloader>/bootloader_mbr.hex
   VERBATIM)
 
+# Opt-in packaging only: no compiler definitions and no ordinary release artifacts.
+set(BOOTLOADER_MIGRATION_SOURCE_ID "" CACHE STRING "Installed USB bootloader VID/PID, e.g. 0x12097694")
+set(BOOTLOADER_MIGRATION_TARGET_ID "" CACHE STRING "Expected standard UF2 VID/PID, e.g. 0x12097693")
+add_custom_target(migration-uf2
+  DEPENDS bootloader
+  COMMAND ${Python_EXECUTABLE} ${CMAKE_CURRENT_LIST_DIR}/tools/migration_uf2.py
+    --input $<TARGET_FILE_DIR:bootloader>/bootloader_mbr.uf2
+    --output-dir $<TARGET_FILE_DIR:bootloader>/migration
+    --board "${BOARD}" --mcu "${MCU_VARIANT}"
+    --source-id "${BOOTLOADER_MIGRATION_SOURCE_ID}"
+    --target-id "${BOOTLOADER_MIGRATION_TARGET_ID}"
+  VERBATIM)
+
 #----------------------------------
 # Flashing target
 #----------------------------------

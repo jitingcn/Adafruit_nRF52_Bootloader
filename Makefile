@@ -521,6 +521,16 @@ $(BUILD)/update-$(OUT_NAME)_nosd.uf2: $(BUILD)/$(OUT_NAME)_nosd.hex
 	@echo Create $(notdir $@)
 	$(PYTHON) lib/uf2/utils/uf2conv.py -f $(UF2_FAMILY_ID_BOOTLOADER) -c -o $@ $^
 
+# Explicit one-time migration packaging; never part of all/copy-artifact.
+# Both IDs are USB VID/PID pairs, e.g. 0x12097694 and 0x12097693.
+BOOTLOADER_MIGRATION_SOURCE_ID ?=
+BOOTLOADER_MIGRATION_TARGET_ID ?=
+.PHONY: migration-uf2
+migration-uf2: $(BUILD)/update-$(OUT_NAME)_nosd.uf2
+	$(PYTHON) tools/migration_uf2.py --input "$<" --output-dir "$(BUILD)/migration" \
+		--board "$(BOARD)" --mcu "$(MCU_SUB_VARIANT)" \
+		--source-id "$(BOOTLOADER_MIGRATION_SOURCE_ID)" --target-id "$(BOOTLOADER_MIGRATION_TARGET_ID)"
+
 # merge bootloader and sd hex together
 $(BUILD)/$(MERGED_FILE).hex: $(BUILD)/$(OUT_NAME).hex
 	@echo Create $(notdir $@)
