@@ -49,6 +49,10 @@
 #define LED_STATE_ON   0
 #endif
 
+// Define LED_RGB_COMMON_CATHODE in board.h for active-high PWM RGB channels
+// (LED_RGB_*_PIN). Leave undefined for common-anode RGB. This does not affect
+// individual LEDs, NeoPixels, or APA102 LEDs.
+
 // Internal status colors are masked by this brightness setting.
 #ifndef BOARD_RGB_BRIGHTNESS
 #define BOARD_RGB_BRIGHTNESS 0x101010

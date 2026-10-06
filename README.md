@@ -233,6 +233,18 @@ Migration procedure:
    transfer and can invalidate or overwrite application storage; the new
    bootloader's application-preservation fixes do not protect that first step.
 
+### PWM RGB LED polarity
+
+For a common-cathode RGB LED using `LED_RGB_RED_PIN`, `LED_RGB_GREEN_PIN`,
+and `LED_RGB_BLUE_PIN`, add `#define LED_RGB_COMMON_CATHODE` to the board's
+`board.h`. Leave it undefined for a common-anode RGB LED; defining it as `0`
+still enables common-cathode mode.
+
+This option affects only the three PWM RGB channels. Independent status LEDs
+retain their `LED_STATE_ON` polarity; NeoPixel and APA102 outputs are unchanged.
+Run the polarity regression with `python3 tools/test_led_pwm.py` (requires a
+host C compiler; override it with `CC`).
+
 ### Flash
 
 To flash the bootloader (without softdevice/mbr) using JLink:

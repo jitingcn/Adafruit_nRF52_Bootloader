@@ -762,9 +762,15 @@ void neopixel_teardown(void) {
 
 // write 3 bytes color to a built-in neopixel
 void neopixel_write (uint8_t *pixels) {
-  led_pwm_duty_cycle(LED_RGB_RED, pixels[2]);
-  led_pwm_duty_cycle(LED_RGB_GREEN, pixels[1]);
-  led_pwm_duty_cycle(LED_RGB_BLUE, pixels[0]);
+  // Only the RGB channels share this polarity; individual LEDs use LED_STATE_ON.
+#ifdef LED_RGB_COMMON_CATHODE
+  uint8_t const invert_mask = 0xff;
+#else
+  uint8_t const invert_mask = 0;
+#endif
+  led_pwm_duty_cycle(LED_RGB_RED, pixels[2] ^ invert_mask);
+  led_pwm_duty_cycle(LED_RGB_GREEN, pixels[1] ^ invert_mask);
+  led_pwm_duty_cycle(LED_RGB_BLUE, pixels[0] ^ invert_mask);
 }
 #endif
 
