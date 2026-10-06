@@ -607,6 +607,19 @@ uint32_t dfu_image_activate()
 }
 
 
+uint32_t dfu_abort(void)
+{
+    // Serial flash operations are synchronous. Keep registered storage/timer.
+    flash_nrf5x_discard();
+    m_init_packet_length = 0;
+    m_image_crc = 0;
+    m_image_size = 0;
+    m_data_received = 0;
+    m_dfu_state = DFU_STATE_IDLE;
+    return dfu_timer_restart();
+}
+
+
 void dfu_reset(void)
 {
     dfu_update_status_t update_status = { 0 };

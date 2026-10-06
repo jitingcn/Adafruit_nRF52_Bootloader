@@ -38,6 +38,8 @@ out the [complete list of all boards here](/supported_boards.md).
 - Auto-enter DFU briefly on startup for DTR auto-reset trick (832 only)
 - Supports dual bank firmware updates (disabled by default)
 - Supports signed firmware updates (disabled by default)
+- Checks the initial stack pointer and Thumb reset vector before booting applications
+  without a stored CRC, including the erased-settings fallback.
 
 Note: For OTA, `Packet Receipt Notification` (PRN) must be 8 or less, which can be configured in nRF DFU. Otherwise, the
 bootloader will run out of
@@ -143,6 +145,9 @@ Then build it with `make BOARD={board} all`, for example:
 ```
 make BOARD=feather_nrf52840_express all
 ```
+
+Make uses `python3` by default. Set `PYTHON=/path/to/python3` in the environment
+or on the Make command line to override the interpreter, including UF2 deployment.
 
 For the list of supported boards, run `make` without `BOARD=` :
 
@@ -279,8 +284,30 @@ make BOARD=feather_nrf52840_express flash-mbr
 
 ### Dual bank firmware support:
 
-This bootloader can split the FLASH memory into 2 partitions, one for the last successfully uploaded firmware, and the other for the new firmware that is being uploaded. In case the firmware upload fails, the bootloader will revert to the last working firmware version. The only drawback is that the maximum firmware size is half of the device FLASH size: That is why it is disabled by default.
-You can enable this feature by passing DUALBANK_FW=1 to the make process while compiling the bootloader
+Dual-bank updates stage the incoming image separately from the active application,
+reducing the maximum application size to approximately half the available space.
+Enable them with `DUALBANK_FW=1` for Make or `-DDUALBANK_FW=ON` for CMake.
+
+The old application remains available while a replacement is received and
+validated. Once activation starts copying over bank 0, the old image is no longer
+a rollback copy. For serial dual-bank application updates, the bootloader writes
+and reads back an invalid bank-0 marker before erasing the active image, compares
+the copied image against the staging bank, and marks it valid only after that
+comparison succeeds. A failed invalidation leaves bank 0 untouched; a failed copy
+leaves it unbootable.
+
+Serial validation or activation failures discard queued packets and pending flash
+cache data, reset the existing DFU session for a fresh upload, and do not show the
+write-complete indication. No new serial wire response is introduced. These
+activation checks do not change the asynchronous BLE OTA path.
+
+Flash page erases and dirty-page writes feed an already-running watchdog's enabled
+reload channels. The watchdog interval must still exceed each individual blocking
+flash operation; feeding cannot make an arbitrarily short interval safe.
+
+Host regressions run with `python3 -m unittest discover -s tools -p 'test_*.py'`.
+The DFU and watchdog regressions require a native C compiler (`CC` can override it)
+on Linux; modeled hardware failures and timing are not physical-device proof.
 
 ### Signed firmware support:
 This bootloader can validate that the uploaded firmware is digitally signed, and refuse to install unsigned or signed with the improper key firmware. Because this will make Arduino uploads stop working (because they are not digitally signed), this feature is disabled by default.

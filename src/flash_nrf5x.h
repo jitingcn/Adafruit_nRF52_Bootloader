@@ -37,6 +37,8 @@
 void flash_nrf5x_erase (uint32_t dst, uint32_t len);
 void flash_nrf5x_write (uint32_t dst, void const *src, uint32_t len, bool need_erase);
 void flash_nrf5x_flush (bool need_erase);
+// Drop a pending page without programming abandoned transfer data.
+void flash_nrf5x_discard(void);
 
 #ifdef __cplusplus
  }

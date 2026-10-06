@@ -89,6 +89,14 @@ uint32_t dfu_image_validate(void);
  */
 uint32_t dfu_image_activate(void);
 
+/**@brief Abandon a failed serial transfer without resetting or registering storage again.
+ *
+ * @details Only for the synchronous serial path, after pending packets are flushed.
+ *          Returns to IDLE and restarts the existing inactivity timer.
+ * @return NRF_SUCCESS on success, a timer error otherwise.
+ */
+uint32_t dfu_abort(void);
+
 /**@brief Function for reseting the current update procedure and return to initial state.
  *        
  * @details This function call will result in a system reset to ensure correct system behavior.

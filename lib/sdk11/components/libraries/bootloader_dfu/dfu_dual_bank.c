@@ -20,6 +20,7 @@
 #include "app_timer.h"
 #include "bootloader.h"
 #include "bootloader_types.h"
+#include "bootloader_settings.h"
 #include "pstorage.h"
 #include "nrf_mbr.h"
 #include "dfu_init.h"
@@ -312,11 +313,29 @@ static uint32_t dfu_activate_app(void)
     }
     else
     {
+        // Revoke the old image durably before modifying any of bank 0.
+        // Serial settings writes are synchronous; verify the actual flash page.
+        dfu_update_status_t invalidated = { 0 };
+        invalidated.status_code = DFU_BANK_0_ERASED;
+        bootloader_dfu_update_process(invalidated);
+        bootloader_settings_t const * settings;
+        bootloader_util_settings_get(&settings);
+        if (settings->bank_0 != BANK_INVALID_APP ||
+            settings->bank_0_crc != 0 || settings->bank_0_size != 0)
+        {
+            return NRF_ERROR_INVALID_DATA;
+        }
+
         flash_nrf5x_erase(DFU_BANK_0_REGION_START, m_start_packet.app_image_size); 
         pstorage_callback_handler(&m_storage_handle_app, PSTORAGE_CLEAR_OP_CODE, NRF_SUCCESS, NULL, 0);
         
         flash_nrf5x_write(DFU_BANK_0_REGION_START, (uint8_t *)DFU_BANK_1_REGION_START, m_start_packet.app_image_size, false);
         flash_nrf5x_flush(false);
+        if (memcmp((void *)DFU_BANK_0_REGION_START,
+                   (void *)DFU_BANK_1_REGION_START, m_start_packet.app_image_size) != 0)
+        {
+            return NRF_ERROR_INVALID_DATA;
+        }
         pstorage_callback_handler(&m_storage_handle_app, PSTORAGE_STORE_OP_CODE, NRF_SUCCESS, (uint8_t *) DFU_BANK_1_REGION_START, m_start_packet.app_image_size);
     }
     
@@ -702,6 +721,19 @@ uint32_t dfu_image_activate()
     }
 
     return err_code;
+}
+
+
+uint32_t dfu_abort(void)
+{
+    // Serial flash operations are synchronous. Keep registered storage/timer.
+    flash_nrf5x_discard();
+    m_init_packet_length = 0;
+    m_image_crc = 0;
+    m_image_size = 0;
+    m_data_received = 0;
+    m_dfu_state = DFU_STATE_IDLE;
+    return dfu_timer_restart();
 }
 
 

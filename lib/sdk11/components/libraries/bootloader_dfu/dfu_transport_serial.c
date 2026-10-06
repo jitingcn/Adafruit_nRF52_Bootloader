@@ -231,12 +231,23 @@ static void process_dfu_packet(void * p_event_data, uint16_t event_size)
                         break;
 
                     case STOP_DATA_PACKET:
-                        (void)dfu_image_validate();
-                        (void)dfu_image_activate();
+                        retval = dfu_image_validate();
+                        if (retval == NRF_SUCCESS)
+                        {
+                            retval = dfu_image_activate();
+                        }
 
-                        led_state(STATE_WRITING_FINISHED);
-
-                        // Break the loop by returning.
+                        // Consume STOP and discard packets from this finished/failed session.
+                        data_queue_flush();
+                        if (retval == NRF_SUCCESS)
+                        {
+                            led_state(STATE_WRITING_FINISHED);
+                        }
+                        else
+                        {
+                            retval = dfu_abort();
+                            APP_ERROR_CHECK(retval);
+                        }
                         return;
 
                     default:
