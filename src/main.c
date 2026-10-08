@@ -109,6 +109,11 @@ extern void tusb_hal_nrf_power_event(uint32_t event);
 #define DFU_MAGIC_UF2_RESET             0x57
 #define DFU_MAGIC_SKIP                  0x6d
 
+// Shared with paired applications; healthy uptime acknowledges E1/E2.
+#define DFU_MAGIC_WDT_FIRST             0xE1
+#define DFU_MAGIC_WDT_SECOND            0xE2
+#define DFU_MAGIC_RECOVERY              0xE3
+
 #define DFU_DBL_RESET_MAGIC             0x5A1AD5      // SALADS
 #define DFU_DBL_RESET_APP               0x4ee5677e
 #define DFU_DBL_RESET_DELAY             500
@@ -209,6 +214,7 @@ int main(void) {
    */
   if (!bootloader_must_be_reentered && 
        bootloader_app_is_valid() && 
+      (NRF_POWER->GPREGRET != DFU_MAGIC_RECOVERY || bootloader_recovery_can_start_app()) &&
       !bootloader_dfu_sd_in_progress()) {
     PRINTF("App is valid\r\n");
     if (is_sd_existed()) {
@@ -224,6 +230,12 @@ int main(void) {
 
     // start application
     PRINTF("Starting app...\r\n");
+    // Recovery remains latched through DFU/reset, until a real app handoff.
+    if (NRF_POWER->GPREGRET == DFU_MAGIC_RECOVERY) {
+      NRF_POWER->GPREGRET = 0;
+    }
+    // Publish recovery-v1 support only after peripheral/SoftDevice teardown.
+    NRF_TIMER2->CC[1] = 0x52435631u;
     bootloader_app_start();
   }
 
@@ -231,7 +243,8 @@ int main(void) {
   
   // Reset the system with the OTA DFU update in case we were in it, 
   // to allow completion of FLASHING, otherwise, default to normal reset
-  if (_ota_was_connected) {
+  if (_ota_was_connected &&
+      (NRF_POWER->GPREGRET != DFU_MAGIC_RECOVERY || bootloader_dfu_sd_in_progress())) {
     NRF_POWER->GPREGRET = DFU_MAGIC_OTA_RESET;
   }
   
@@ -240,9 +253,14 @@ int main(void) {
 
 static void check_dfu_mode(void) {
   uint32_t const gpregret = NRF_POWER->GPREGRET;
+  uint32_t const reset_reason = NRF_POWER->RESETREAS;
+  uint32_t const faults = reset_reason &
+      (POWER_RESETREAS_DOG_Msk | POWER_RESETREAS_LOCKUP_Msk);
+  // W1C only the consumed causes; the application owns all other reset bits.
+  NRF_POWER->RESETREAS = faults;
 
   // SD is already Initialized in case of BOOTLOADER_DFU_OTA_MAGIC
-  _sd_inited = (gpregret == DFU_MAGIC_OTA_APPJUM);
+  _sd_inited = (gpregret == DFU_MAGIC_OTA_APPJUM) && !faults;
 
   // Start Bootloader in BLE OTA mode
   _ota_dfu = (gpregret == DFU_MAGIC_OTA_APPJUM) || (gpregret == DFU_MAGIC_OTA_RESET);
@@ -252,21 +270,12 @@ static void check_dfu_mode(void) {
   bool const uf2_dfu         = (gpregret == DFU_MAGIC_UF2_RESET);
   bool const dfu_skip        = (gpregret == DFU_MAGIC_SKIP);
 
-  bool const reason_reset_pin = (NRF_POWER->RESETREAS & POWER_RESETREAS_RESETPIN_Msk) ? true : false;
+  bool const reason_reset_pin = (reset_reason & POWER_RESETREAS_RESETPIN_Msk) ? true : false;
 
   // start either serial, uf2 or ble
   bool dfu_start = _ota_dfu || serial_only_dfu || uf2_dfu ||
                    (((*dbl_reset_mem) == DFU_DBL_RESET_MAGIC) && reason_reset_pin);
 
-  // Clear GPREGRET if it is our values
-  if (dfu_start || dfu_skip) {
-    NRF_POWER->GPREGRET = 0;
-  }
-
-  // skip dfu entirely
-  if (dfu_skip) {
-    return;
-  }
 
   /*------------- Determine DFU mode (Serial, OTA, FRESET or normal) -------------*/
   // DFU button pressed
@@ -279,7 +288,32 @@ static void check_dfu_mode(void) {
   _ota_dfu = _ota_dfu || (button_pressed(BUTTON_DFU) && button_pressed(BUTTON_DFU_OTA));
 #endif
 
+  // Explicit DFU terminates the retry streak, but LOCKUP/fatal stays untimed.
+  bool const recovery = gpregret == DFU_MAGIC_RECOVERY ||
+      (faults & POWER_RESETREAS_LOCKUP_Msk) ||
+      ((faults & POWER_RESETREAS_DOG_Msk) && !dfu_start &&
+       gpregret == DFU_MAGIC_WDT_SECOND);
+  bool const retry = (faults & POWER_RESETREAS_DOG_Msk) && !dfu_start && !recovery;
+  if (recovery) {
+    NRF_POWER->GPREGRET = DFU_MAGIC_RECOVERY;
+    dfu_start = true;
+  } else if (retry) {
+    NRF_POWER->GPREGRET = gpregret == DFU_MAGIC_WDT_FIRST ?
+        DFU_MAGIC_WDT_SECOND : DFU_MAGIC_WDT_FIRST;
+  } else if (dfu_start || dfu_skip || gpregret == DFU_MAGIC_WDT_FIRST ||
+             gpregret == DFU_MAGIC_WDT_SECOND) {
+    NRF_POWER->GPREGRET = 0;
+  }
+
+  if (dfu_skip && !faults && !recovery) {
+    return;
+  }
+
   bool const valid_app = bootloader_app_is_valid();
+  // Retry directly, without MakeCode single-tap or serial startup timeouts.
+  if (retry && valid_app) {
+    return;
+  }
   bool const just_start_app = valid_app && !dfu_start && (*dbl_reset_mem) == DFU_DBL_RESET_APP;
 
   if (!just_start_app && APP_ASKS_FOR_SINGLE_TAP_RESET()) {
@@ -304,7 +338,7 @@ static void check_dfu_mode(void) {
      * Note: Double Reset WONT work with nrf52832 since all its SRAM got cleared with GPIO reset. */
     bootloader_dfu_start(false, DFU_SERIAL_STARTUP_INTERVAL, false);
 #else
-    // Note: RESETREAS is not clear by bootloader, it should be cleared by application upon init()
+    // Unconsumed reset reasons are cleared by the application upon init().
     if (reason_reset_pin) {
       // Register our first reset for double reset detection
       (*dbl_reset_mem) = DFU_DBL_RESET_MAGIC;
@@ -334,7 +368,7 @@ static void check_dfu_mode(void) {
     }
 
     // Initiate an update of the firmware.
-    if (APP_ASKS_FOR_SINGLE_TAP_RESET() || uf2_dfu || serial_only_dfu) {
+    if (!recovery && (APP_ASKS_FOR_SINGLE_TAP_RESET() || uf2_dfu || serial_only_dfu)) {
       // If USB is not enumerated in 15s (eg. because we're running on battery), we restart into app.
       bootloader_dfu_start(_ota_dfu, 15000, true);
     } else {

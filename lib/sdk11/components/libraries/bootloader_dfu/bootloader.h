@@ -88,6 +88,9 @@ void bootloader_dfu_activity_mark(void);
  */
 void bootloader_mark_usb_mounted(void);
 
+/**@brief Recovery may exit only after a completed update or explicit button exit. */
+bool bootloader_recovery_can_start_app(void);
+
 /**@brief Function getting state of SoftDevice update in progress.
  *        After a successfull SoftDevice transfer the system restarts in orderto disable SoftDevice
  *        and complete the update.
